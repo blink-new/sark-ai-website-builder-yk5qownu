@@ -11,9 +11,8 @@ import {
   Users, 
   Shield, 
   ArrowRight,
-
-  Github,
-  Twitter
+  Twitter,
+  Google
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 
@@ -94,8 +93,8 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
               {theme === 'light' ? '🌙' : '☀️'}
             </Button>
             <Button variant="outline" size="sm">
-              <Github className="w-4 h-4 mr-2" />
-              GitHub
+              <Google className="w-4 h-4 mr-2" />
+              Sign in with Google
             </Button>
             <Button onClick={onGetStarted} size="sm">
               Get Started
@@ -261,10 +260,7 @@ export function LandingPage({ onGetStarted }: LandingPageProps) {
               <a href="#" className="text-gray-400 hover:text-white transition-colors">
                 <Twitter className="w-5 h-5" />
               </a>
-              <a href="#" className="text-gray-400 hover:text-white transition-colors">
-                <Github className="w-5 h-5" />
-              </a>
-              <span className="text-gray-400">© 2024 Sark. All rights reserved.</span>
+              <span className="text-gray-400">2024 Sark. All rights reserved.</span>
             </div>
           </div>
         </div>

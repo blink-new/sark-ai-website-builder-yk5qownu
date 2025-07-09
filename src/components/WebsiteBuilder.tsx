@@ -2,31 +2,24 @@ import { useState, useRef } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import { Progress } from '@/components/ui/progress'
-import { Badge } from '@/components/ui/badge'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { ScrollArea } from '@/components/ui/scroll-area'
-import { 
-  Code, 
- 
-  Download, 
-  Settings, 
-  LogOut, 
-  Zap, 
-  FileText,
+import {
+  Code,
+  Download,
+  LogOut,
+  Zap,
   Globe,
   Loader2,
   CheckCircle,
   XCircle,
-  Copy,
-  ExternalLink,
-  Alert,
-  AlertDescription
+  ExternalLink
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
+import { blink } from '@/blink/client'
 
 interface User {
   email: string
@@ -38,85 +31,121 @@ interface WebsiteBuilderProps {
   onLogout: () => void
 }
 
+interface ProjectFile {
+  name: string
+  type: 'html'
+  content: string
+}
+
+interface GenerationStep {
+  id: string
+  title: string
+  status: 'pending' | 'running' | 'completed' | 'error'
+  progress: number
+}
+
+const SYSTEM_PROMPT = `You are an elite, advanced web developer and designer. You generate advanced, fully fledged, modern, visually impressive, and highly functional websites. Always include all HTML, CSS, and JavaScript within a single HTML file. When asked to improve or fix an existing website, analyze the current code and make meaningful, professional, and sophisticated enhancements. Never omit essential website elements. IMPORTANT: Your reply MUST be ONLY the full HTML code, with no markdown, no code block, no commentary, and no explanations0just the raw code. Do NOT include any `
+
 export function WebsiteBuilder({ user, onLogout }: WebsiteBuilderProps) {
   const { theme, toggleTheme } = useTheme()
   const [prompt, setPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
-  const [generatedHtml, setGeneratedHtml] = useState('')
-  const [error, setError] = useState('')
+  const [generationSteps, setGenerationSteps] = useState<GenerationStep[]>([])
+  const [generatedFile, setGeneratedFile] = useState<ProjectFile | null>(null)
+  const [previewHtml, setPreviewHtml] = useState('')
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
-  const handleGenerate = async () => {
+  const generateWebsite = async () => {
     if (!prompt.trim()) return
 
     setIsGenerating(true)
-    setGeneratedHtml('')
-    setError('')
+    setGeneratedFile(null)
+    setPreviewHtml('')
+
+    const steps: GenerationStep[] = [
+      { id: '1', title: 'Sending request to AI', status: 'pending', progress: 0 },
+      { id: '2', title: 'Receiving AI response', status: 'pending', progress: 0 },
+      { id: '3', title: 'Processing response', status: 'pending', progress: 0 }
+    ]
+
+    setGenerationSteps(steps)
 
     try {
-      // Replace with the actual fetch call to the deployed function URL
-      // const response = await fetch('YOUR_FUNCTION_URL', {
-      const response = await fetch('http://localhost:54321/functions/v1/generate-website', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          // Add Authorization header if needed
-        },
-        body: JSON.stringify({ prompt, currentHtml: generatedHtml }),
-      });
+      // Step 1: Sending request
+      steps[0].status = 'running'
+      setGenerationSteps([...steps])
 
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
+      const response = await blink.ai.generateText({
+        model: 'google/gemini-2.5-pro',
+        messages: [
+          { role: 'system', content: SYSTEM_PROMPT },
+          { role: 'user', content: prompt }
+        ],
+        temperature: 0.7,
+        maxTokens: 16384
+      })
+
+      steps[0].progress = 100
+      steps[0].status = 'completed'
+      steps[1].status = 'running'
+      setGenerationSteps([...steps])
+
+      // Simulate receiving response progress
+      for (let p = 0; p <= 100; p += 20) {
+        await new Promise(r => setTimeout(r, 100))
+        steps[1].progress = p
+        setGenerationSteps([...steps])
       }
 
-      if (!response.body) {
-        throw new Error('Response body is empty');
+      steps[1].status = 'completed'
+      steps[2].status = 'running'
+      setGenerationSteps([...steps])
+
+      // Process response
+      const htmlCode = response.text.trim()
+
+      steps[2].progress = 100
+      steps[2].status = 'completed'
+      setGenerationSteps([...steps])
+
+      const file: ProjectFile = {
+        name: 'index.html',
+        type: 'html',
+        content: htmlCode
       }
 
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let done = false;
-
-      while (!done) {
-        const { value, done: readerDone } = await reader.read();
-        done = readerDone;
-        const chunk = decoder.decode(value, { stream: true });
-        setGeneratedHtml((prev) => prev + chunk);
-      }
+      setGeneratedFile(file)
+      setPreviewHtml(htmlCode)
 
     } catch (error) {
-      console.error("Error generating website:", error);
-      setError("Failed to generate website. Please try again.");
+      console.error('AI generation failed:', error)
+      const errorStep = steps.find(s => s.status === 'running')
+      if (errorStep) {
+        errorStep.status = 'error'
+        setGenerationSteps([...steps])
+      }
     } finally {
-      setIsGenerating(false);
+      setIsGenerating(false)
     }
   }
 
-  const openPreviewInNewTab = () => {
-    if (generatedHtml) {
-      const blob = new Blob([generatedHtml], { type: 'text/html' });
-      const url = URL.createObjectURL(blob);
-      window.open(url, '_blank');
-      URL.revokeObjectURL(url);
-    }
-  };
-
-  const copyToClipboard = () => {
-    if (generatedHtml) {
-      navigator.clipboard.writeText(generatedHtml);
-      // You can add a toast notification here to confirm copy
-    }
-  };
-
   const downloadFile = () => {
-    if (generatedHtml) {
-      const blob = new Blob([generatedHtml], { type: 'text/html' })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement('a')
-      a.href = url
-      a.download = 'index.html'
-      a.click()
-      URL.revokeObjectURL(url)
+    if (!generatedFile) return
+    const blob = new Blob([generatedFile.content], { type: 'text/html' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = generatedFile.name
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  const openPreviewInNewTab = () => {
+    if (!generatedFile) return
+    const newWindow = window.open()
+    if (newWindow) {
+      newWindow.document.write(generatedFile.content)
+      newWindow.document.close()
     }
   }
 
@@ -142,9 +171,6 @@ export function WebsiteBuilder({ user, onLogout }: WebsiteBuilderProps) {
               <Button variant="ghost" size="sm" onClick={toggleTheme}>
                 {theme === 'light' ? '🌙' : '☀️'}
               </Button>
-              <Button variant="ghost" size="sm">
-                <Settings className="w-4 h-4" />
-              </Button>
               <Button variant="ghost" size="sm" onClick={onLogout}>
                 <LogOut className="w-4 h-4" />
               </Button>
@@ -164,7 +190,7 @@ export function WebsiteBuilder({ user, onLogout }: WebsiteBuilderProps) {
                   <span>AI Website Generator</span>
                 </CardTitle>
                 <CardDescription>
-                  Describe your website and let AI create it for you
+                  Describe your website and let AI create a single HTML file with all code included
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-4">
@@ -176,11 +202,12 @@ export function WebsiteBuilder({ user, onLogout }: WebsiteBuilderProps) {
                     value={prompt}
                     onChange={(e) => setPrompt(e.target.value)}
                     className="min-h-[100px]"
+                    disabled={isGenerating}
                   />
                 </div>
                 
                 <Button 
-                  onClick={handleGenerate}
+                  onClick={generateWebsite}
                   disabled={isGenerating || !prompt.trim()}
                   className="w-full bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700"
                 >
@@ -196,12 +223,6 @@ export function WebsiteBuilder({ user, onLogout }: WebsiteBuilderProps) {
                     </>
                   )}
                 </Button>
-                {error && (
-                  <Alert variant="destructive" className="mt-4">
-                    <XCircle className="h-4 w-4" />
-                    <AlertDescription>{error}</AlertDescription>
-                  </Alert>
-                )}
               </CardContent>
             </Card>
 
@@ -250,46 +271,31 @@ export function WebsiteBuilder({ user, onLogout }: WebsiteBuilderProps) {
                 </motion.div>
               )}
             </AnimatePresence>
-
-            {/* Generated Files */}
-            {generatedHtml && (
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center justify-between">
-                    <span>Generated File</span>
-                    <div className="flex items-center gap-2">
-                      <Button size="sm" variant="outline" onClick={copyToClipboard}>
-                        <Copy className="w-4 h-4 mr-2" />
-                        Copy
-                      </Button>
-                      <Button size="sm" onClick={downloadFile}>
-                        <Download className="w-4 h-4 mr-2" />
-                        Download
-                      </Button>
-                    </div>
-                  </CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="flex items-center space-x-3 p-3 rounded-lg bg-gray-50 dark:bg-gray-800">
-                    <div className="text-orange-500">
-                      <FileText className="w-4 h-4" />
-                    </div>
-                    <span className="font-medium">index.html</span>
-                    <Badge variant="secondary" className="ml-auto">
-                      HTML
-                    </Badge>
-                  </div>
-                </CardContent>
-              </Card>
-            )}
           </div>
 
           {/* Right Panel - Code Editor and Preview */}
           <div className="space-y-6">
-            <Card className="h-[600px] flex flex-col">
+            <Card className="h-[600px]">
               <CardHeader>
-                <Tabs defaultValue="code" className="w-full">
-                  <TabsList className="grid w-full grid-cols-2">
+                <CardTitle className="flex items-center justify-between">
+                  <span>Code Editor & Preview</span>
+                  {generatedFile && (
+                    <div className="flex items-center space-x-2">
+                      <Button size="sm" variant="outline" onClick={downloadFile}>
+                        <Download className="w-4 h-4 mr-2" />
+                        Download
+                      </Button>
+                      <Button size="sm" variant="outline" onClick={openPreviewInNewTab}>
+                        <ExternalLink className="w-4 h-4 mr-2" />
+                        Open Preview
+                      </Button>
+                    </div>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="p-0 h-full">
+                <Tabs defaultValue="code" className="h-full">
+                  <TabsList className="mx-6 mb-4">
                     <TabsTrigger value="code">
                       <Code className="w-4 h-4 mr-2" />
                       Code
@@ -299,56 +305,42 @@ export function WebsiteBuilder({ user, onLogout }: WebsiteBuilderProps) {
                       Preview
                     </TabsTrigger>
                   </TabsList>
-                </Tabs>
-              </CardHeader>
-              <CardContent className="flex-grow p-0">
-                <Tabs defaultValue="code" className="h-full">
-                  <TabsContent value="code" className="h-full p-0 m-0">
-                    <div className="relative h-full">
-                      <ScrollArea className="h-full">
-                        {generatedHtml ? (
-                          <pre className="p-4 font-mono text-sm whitespace-pre-wrap">{generatedHtml}</pre>
-                        ) : (
-                          <div className="flex items-center justify-center h-full text-gray-500">
-                            <div className="text-center">
-                              <Code className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                              <p>Your generated code will appear here</p>
-                            </div>
-                          </div>
-                        )}
-                      </ScrollArea>
-                      {generatedHtml && (
-                        <Button size="sm" variant="ghost" className="absolute top-2 right-2" onClick={copyToClipboard}>
-                          <Copy className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
-                  </TabsContent>
 
-                  <TabsContent value="preview" className="h-full p-0 m-0">
-                    <div className="relative h-full">
-                      {generatedHtml ? (
-                        <iframe
-                          ref={iframeRef}
-                          srcDoc={generatedHtml}
-                          className="w-full h-full border-0"
-                          title="Website Preview"
-                          sandbox="allow-scripts"
-                        />
+                  <TabsContent value="code" className="h-full px-6 pb-6">
+                    <ScrollArea className="h-full">
+                      {generatedFile ? (
+                        <div className="bg-gray-900 text-gray-100 p-4 rounded-lg font-mono text-sm overflow-auto whitespace-pre-wrap">
+                          {generatedFile.content}
+                        </div>
                       ) : (
                         <div className="flex items-center justify-center h-full text-gray-500">
                           <div className="text-center">
-                            <Globe className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                            <Code className="w-12 h-12 mx-auto mb-4 opacity-50" />
                             <p>Generate a website to see the preview</p>
                           </div>
                         </div>
                       )}
-                      {generatedHtml && (
-                        <Button size="sm" variant="ghost" className="absolute top-2 right-2" onClick={openPreviewInNewTab}>
-                          <ExternalLink className="w-4 h-4" />
-                        </Button>
-                      )}
-                    </div>
+                    </ScrollArea>
+                  </TabsContent>
+
+                  <TabsContent value="preview" className="h-full px-6 pb-6">
+                    {previewHtml ? (
+                      <div className="h-full border rounded-lg overflow-hidden">
+                        <iframe
+                          ref={iframeRef}
+                          srcDoc={previewHtml}
+                          className="w-full h-full border-0"
+                          title="Website Preview"
+                        />
+                      </div>
+                    ) : (
+                      <div className="flex items-center justify-center h-full text-gray-500">
+                        <div className="text-center">
+                          <Globe className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p>Generate a website to see the preview</p>
+                        </div>
+                      </div>
+                    )}
                   </TabsContent>
                 </Tabs>
               </CardContent>

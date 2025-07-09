@@ -6,8 +6,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Code, Mail, Lock, User, ArrowLeft } from 'lucide-react'
+import { Code, Mail, Lock, User, ArrowLeft, Google } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
+import { blink } from '@/blink/client'
 
 interface AuthFormProps {
   onBack: () => void
@@ -27,8 +28,7 @@ export function AuthForm({ onBack, onAuth }: AuthFormProps) {
     setError('')
 
     try {
-      // TODO: Implement actual authentication
-      await new Promise(resolve => setTimeout(resolve, 1000))
+      await blink.auth.signIn(loginData.email, loginData.password)
       onAuth({ email: loginData.email, username: loginData.email.split('@')[0] })
     } catch {
       setError('Invalid credentials')
@@ -49,13 +49,20 @@ export function AuthForm({ onBack, onAuth }: AuthFormProps) {
     }
 
     try {
-      // TODO: Implement actual registration
-      await new Promise(resolve => setTimeout(resolve, 1000))
-      onAuth({ email: signupData.email, username: signupData.username })
+      await blink.auth.signUp(signupData.email, signupData.password, { data: { username: signupData.username } })
+      // onAuth will be triggered by the onAuthStateChanged listener in App.tsx
     } catch {
       setError('Registration failed')
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await blink.auth.loginWithProvider('google')
+    } catch {
+      setError('Google sign-in failed')
     }
   }
 
@@ -261,6 +268,21 @@ export function AuthForm({ onBack, onAuth }: AuthFormProps) {
                       {isLoading ? 'Creating account...' : 'Create Account'}
                     </Button>
                   </form>
+                  <div className="relative my-4">
+                    <div className="absolute inset-0 flex items-center">
+                      <span className="w-full border-t" />
+                    </div>
+                    <div className="relative flex justify-center text-xs uppercase">
+                      <span className="bg-white px-2 text-muted-foreground dark:bg-gray-900">
+                        Or continue with
+                      </span>
+                    </div>
+                  </div>
+
+                  <Button variant="outline" className="w-full" onClick={handleGoogleSignIn}>
+                    <Google className="w-5 h-5" />
+                    <span>Sign in with Google</span>
+                  </Button>
                 </TabsContent>
               </Tabs>
             </CardContent>
