@@ -22,7 +22,9 @@ import {
   CheckCircle,
   XCircle,
   Copy,
-  ExternalLink
+  ExternalLink,
+  Alert,
+  AlertDescription
 } from 'lucide-react'
 import { useTheme } from '@/contexts/ThemeContext'
 
@@ -41,6 +43,7 @@ export function WebsiteBuilder({ user, onLogout }: WebsiteBuilderProps) {
   const [prompt, setPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [generatedHtml, setGeneratedHtml] = useState('')
+  const [error, setError] = useState('')
   const iframeRef = useRef<HTMLIFrameElement>(null)
 
   const handleGenerate = async () => {
@@ -48,16 +51,45 @@ export function WebsiteBuilder({ user, onLogout }: WebsiteBuilderProps) {
 
     setIsGenerating(true)
     setGeneratedHtml('')
-    // This is where the call to the backend function will be made.
-    // For now, I will keep the simulation logic and add the real logic later.
-    await simulateGeneration();
-  }
+    setError('')
 
-  const simulateGeneration = async () => {
-    // This function will be replaced with the actual API call
-    const mockHtml = `<!DOCTYPE html><html><body><h1>Hello, World!</h1></body></html>`;
-    setGeneratedHtml(mockHtml);
-    setIsGenerating(false);
+    try {
+      // Replace with the actual fetch call to the deployed function URL
+      // const response = await fetch('YOUR_FUNCTION_URL', {
+      const response = await fetch('http://localhost:54321/functions/v1/generate-website', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          // Add Authorization header if needed
+        },
+        body: JSON.stringify({ prompt, currentHtml: generatedHtml }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      if (!response.body) {
+        throw new Error('Response body is empty');
+      }
+
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let done = false;
+
+      while (!done) {
+        const { value, done: readerDone } = await reader.read();
+        done = readerDone;
+        const chunk = decoder.decode(value, { stream: true });
+        setGeneratedHtml((prev) => prev + chunk);
+      }
+
+    } catch (error) {
+      console.error("Error generating website:", error);
+      setError("Failed to generate website. Please try again.");
+    } finally {
+      setIsGenerating(false);
+    }
   }
 
   const openPreviewInNewTab = () => {
@@ -164,6 +196,12 @@ export function WebsiteBuilder({ user, onLogout }: WebsiteBuilderProps) {
                     </>
                   )}
                 </Button>
+                {error && (
+                  <Alert variant="destructive" className="mt-4">
+                    <XCircle className="h-4 w-4" />
+                    <AlertDescription>{error}</AlertDescription>
+                  </Alert>
+                )}
               </CardContent>
             </Card>
 
